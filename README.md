@@ -59,5 +59,3 @@ python backend/validate.py
 - **Engine**: Sentence Transformers for Embeddings + Cosine Similarity.
 - **Balancing**: Custom logic to interleave "Hard Skill" and "Soft Skill" assessments for mixed queries.
 - **Frontend**: React (Vite) with Table view and direct links to SHL.
-
-

@@ -20,8 +20,7 @@ function App() {
       // Allow URL input or text
       const payload = query.startsWith('http') ? { query: '', url: query } : { query: query };
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await axios.post(`${apiUrl}/recommend`, payload);
+      const response = await axios.post('http://localhost:8000/recommend', payload);
       setResults(response.data);
     } catch (err) {
       console.error(err);
