@@ -1,0 +1,9 @@
+requests
+beautifulsoup4
+pandas
+fastapi
+uvicorn
+python-multipart
+sentence-transformers
+numpy
+scikit-learn
