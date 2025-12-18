@@ -4,7 +4,7 @@ pandas
 fastapi
 uvicorn
 python-multipart
-# Cloud-Native Dependencies
-pinecone-client
-google-generativeai
-tqdm
+sentence-transformers
+numpy
+scikit-learn
+torch

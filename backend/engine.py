@@ -1,118 +1,124 @@
+import json
 import os
-import google.generativeai as genai
-from pinecone import Pinecone
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+DATA_FILE = "d:/shl/data/assessments.json"
 
 class RecommendationEngine:
     def __init__(self):
-        self.index = None
-        self.setup_cloud_services()
+        self.assessments = []
+        self.embeddings = None
+        self.model = None
+        self.load_data()
         
-    def setup_cloud_services(self):
-        # 1. Setup Gemini
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        if gemini_key:
-            genai.configure(api_key=gemini_key)
-        else:
-            print("Warning: GEMINI_API_KEY not found. Search will fail.")
+    def load_data(self):
+        if not os.path.exists(DATA_FILE):
+            print(f"Warning: {DATA_FILE} not found. Engine will be empty.")
+            return
 
-        # 2. Setup Pinecone
-        pc_key = os.getenv("PINECONE_API_KEY")
-        if pc_key:
-            try:
-                pc = Pinecone(api_key=pc_key)
-                self.index = pc.Index("shl-assessments")
-            except Exception as e:
-                 print(f"Pinecone Connection Error: {e}")
-        else:
-            print("Warning: PINECONE_API_KEY not found. Search will fail.")
+        with open(DATA_FILE, "r") as f:
+            self.assessments = json.load(f)
+            
+        print(f"Loaded {len(self.assessments)} assessments.")
+        
+        # Categorize assessments
+        for item in self.assessments:
+            t_type = item.get('test_type', '').upper()
+            if any(x in t_type for x in ['K', 'S']):
+                item['category'] = 'Hard'
+            else:
+                item['category'] = 'Soft'
+        
+        # Initialize model
+        print("Loading embedding model...")
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        # Pre-compute embeddings
+        print("Generating embeddings...")
+        corpus = [f"{item['assessment_name']} {item.get('description', '')}" for item in self.assessments]
+        self.embeddings = self.model.encode(corpus)
+        print("Embeddings ready.")
 
     def search(self, query: str, limit: int = 10):
-        if not self.index:
-            print("Error: Pinecone index not initialized.")
+        if not self.assessments:
             return []
-
-        try:
-            # 1. Generate Query Embedding using Gemini
-            # Model must match the one used for ingestion
-            result = genai.embed_content(
-                model="models/embedding-001",
-                content=query,
-                task_type="retrieval_query"
-            )
-            query_embedding = result['embedding']
             
-            # 2. Search Pinecone
-            # Fetch more than limit to allow for balancing if needed
-            search_response = self.index.query(
-                vector=query_embedding,
-                top_k=limit * 2, 
-                include_metadata=True
-            )
+        query_embedding = self.model.encode([query])
+        similarities = cosine_similarity(query_embedding, self.embeddings)[0]
+        
+        # Get top 30 candidates to have a pool for balancing
+        top_indices = np.argsort(similarities)[::-1][:30]
+        
+        candidates = []
+        for idx in top_indices:
+            item = self.assessments[idx].copy()
+            item['score'] = float(similarities[idx])
+            candidates.append(item)
             
-            # 3. Process Results
-            matches = search_response['matches']
-            results = []
-            
-            for match in matches:
-                # Map metadata back to our internal structure
-                md = match['metadata']
-                results.append({
-                    "assessment_name": md.get('name', ''),
-                    "assessment_url": md.get('url', ''),
-                    "test_type": md.get('test_type', ''),
-                    "description": md.get('description', ''),
-                    "score": match['score']
-                })
-            
-            # 4. Balance Results (Same logic as before, but on retrieved candidates)
-            final_results = self._balance_results(results, query, limit)
-            return final_results
-
-        except Exception as e:
-            print(f"Search Error: {e}")
-            return []
+        return self._balance_results(candidates, query, limit)
 
     def _balance_results(self, candidates, query, limit):
-        # Reuse existing balancing logic concepts
-        # Identify intent
+        if not candidates:
+            return []
+            
+        # Separate into categories
+        hard_items = [c for c in candidates if c['category'] == 'Hard']
+        soft_items = [c for c in candidates if c['category'] == 'Soft']
+        
+        # Simple heuristic: Check for obvious soft skill keywords in query
+        soft_keywords = ['team', 'collaborat', 'communicat', 'lead', 'manag', 'person', 'behav', 'soft', 'interpersonal', 'cultur']
         query_lower = query.lower()
-        soft_keywords = ['collaborat', 'communicat', 'team', 'lead', 'person', 'behav', 'soft', 'manag']
         needs_soft = any(k in query_lower for k in soft_keywords)
         
-        hard_skills = []
-        soft_skills = []
+        results = []
         
-        for item in candidates:
-            # Categorize
-            t_type = item.get('test_type', '').upper()
-            if any(x in t_type for x in ['P', 'B', 'A', 'E', 'D', 'C']):
-                soft_skills.append(item)
-            else:
-                hard_skills.append(item)
-                
-        # If no explicit need for soft skills, just return top K (natural order)
-        # But if needs_soft is True, ensure we mix them
+        # Logic:
+        # 1. Always take the absolute best match (score likely highest).
+        # 2. If 'needs_soft' is true, try to interleave Soft items if they are reasonable.
+        # 3. Otherwise, just ensure we don't return 100% homogenous results IF the other category has decent candidates.
         
-        final_list = []
-        if needs_soft and hard_skills and soft_skills:
-            # Interleave: 2 Hard, 1 Soft, etc. or 1:1 depending on ratio
-            h_idx, s_idx = 0, 0
-            while len(final_list) < limit:
-                # Add Hard
-                if h_idx < len(hard_skills):
-                    final_list.append(hard_skills[h_idx])
-                    h_idx += 1
-                if len(final_list) >= limit: break
-                
-                # Add Soft
-                if s_idx < len(soft_skills):
-                    final_list.append(soft_skills[s_idx])
-                    s_idx += 1
-        else:
-            # Default ranking
-            final_list = candidates[:limit]
+        # Strategy: Pick top items, but force at least some ratio if candidates exist.
+        
+        # If user explicitly asks for mixed skills (inferred from needs_soft and presence of hard skills implied by results),
+        # we aim for a mix.
+        
+        # If we have both types available with decent scores:
+        if hard_items and soft_items:
+            best_hard_score = hard_items[0]['score']
+            best_soft_score = soft_items[0]['score']
             
-        return final_list
+            # If scores are comparable (within 20%), force mix
+            score_diff = abs(best_hard_score - best_soft_score)
+            comparable = score_diff < 0.15 
+            
+            if comparable or needs_soft:
+                # Interleave approach
+                h_idx, s_idx = 0, 0
+                while len(results) < limit:
+                    # Pick Hard
+                    if h_idx < len(hard_items):
+                        results.append(hard_items[h_idx])
+                        h_idx += 1
+                    
+                    if len(results) >= limit: break
+                    
+                    # Pick Soft
+                    if s_idx < len(soft_items):
+                        results.append(soft_items[s_idx])
+                        s_idx += 1
+                        
+                    if h_idx >= len(hard_items) and s_idx >= len(soft_items):
+                        break
+            else:
+                # One category is clearly dominant, just return by score
+                results = candidates[:limit]
+        else:
+             results = candidates[:limit]
 
-# Initialize
+        # Deduplicate just in case (though indices are unique)
+        return results[:limit]
+
+# Singleton instance
 engine = RecommendationEngine()

@@ -21,25 +21,25 @@ def validate():
         
     predictions = []
     
-    csv_rows = []
-    
     print(f"Generating predictions for {len(df)} queries...")
     
     for index, row in df.iterrows():
         query = row['Query']
-        # Return top 10 as requested
-        results = engine.search(query, limit=10)
+        results = engine.search(query, limit=5)
         
-        for r in results:
-            # Appendix 3 Format: Query, Assessment_url
-            csv_rows.append({
-                'Query': query,
-                'Assessment_url': r['assessment_url']
-            })
+        # Format: Comma separated list of recommendations? 
+        # The prompt says "return a list... tabular format" for the App.
+        # But for the CSV "1-csv file with 2 columns query and predictions".
+        # Format usually implies a string representation of the list.
+        # I'll join titles or IDs. IDs are safer.
         
-    output_df = pd.DataFrame(csv_rows)
-    # Ensure correct column order
-    output_df = output_df[['Query', 'Assessment_url']]
+        preds_str = " | ".join([f"{r['assessment_name']} ({r['assessment_url']})" for r in results])
+        predictions.append(preds_str)
+        
+    output_df = pd.DataFrame({
+        'Query': df['Query'],
+        'predictions': predictions
+    })
     
     output_df.to_csv(OUTPUT_FILE, index=False)
     print(f"Predictions saved to {OUTPUT_FILE}")
