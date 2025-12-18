@@ -2,7 +2,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from engine import engine
+try:
+    from engine import engine
+except ImportError:
+    from .engine import engine
 
 app = FastAPI(title="SHL Assessment Recommender")
 

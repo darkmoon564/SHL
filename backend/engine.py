@@ -4,7 +4,9 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-DATA_FILE = "d:/shl/data/assessments.json"
+# Get the directory of the current file (engine.py is in backend/)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_FILE = os.path.join(BASE_DIR, "data", "assessments.json")
 
 class RecommendationEngine:
     def __init__(self):
