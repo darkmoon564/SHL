@@ -60,25 +60,4 @@ python backend/validate.py
 - **Balancing**: Custom logic to interleave "Hard Skill" and "Soft Skill" assessments for mixed queries.
 - **Frontend**: React (Vite) with Table view and direct links to SHL.
 
-## Deployment Guide (For Submission)
-To get the public URLs required for the submission form, you can deploy the app for free:
 
-### 1. Backend (e.g., Render.com)
-1.  Push your code to GitHub.
-2.  Go to **Render.com** -> New -> Web Service.
-3.  Connect your repo.
-4.  Settings:
-    *   **Build Command**: `pip install -r backend/requirements.txt`
-    *   **Start Command**: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
-5.  Copy the URL (e.g., `https://shl-backend.onrender.com`).
-
-### 2. Frontend (e.g., Vercel.com)
-1.  Go to **Vercel.com** -> Add New -> Project.
-2.  Connect your GitHub repo.
-3.  Settings:
-    *   **Root Directory**: `frontend`
-    *   **Environment Variables**: Add `VITE_API_URL` = `Your_Backend_URL_From_Step_1` (no trailing slash).
-4.  Deploy!
-5.  Copy the URL (e.g., `https://shl-frontend.vercel.app`).
-
-**Use these two URLs for the submission form.**
